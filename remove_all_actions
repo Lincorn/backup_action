@@ -1,0 +1,47 @@
+#!/bin/sh -
+
+
+export LANG=en_US.UTF-8
+_version='0.1.5-1'
+_repeat='1'
+echo "version: ${_version}"
+
+while [ '1' -le '2' ]; do
+	_list="$(curl -s -L -H 'Accept: application/vnd.github+json' -H "Authorization: Bearer ${GITHUB_TOKEN}" "https://api.github.com/repos/${GH_REPO}/actions/runs" | jq ".workflow_runs[].id" | sed '1d')"
+	case "$(echo "${_list}" | wc -l)" in
+		0)
+			echo '[*] All done, have fun!'
+			exit 0
+			;;
+		1)
+			if [ "${_list}" = '' ]; then
+				echo '[*] All done, have fun!'
+				exit 0
+			fi
+			;;
+	esac
+	if [ ! "${_repeat}" -le '100' ]; then
+		echo '[*] Early Exit'
+		exit 0
+	fi
+	i='1'
+	i_max="$(echo "${_list}" | wc -l)"
+	touch '/tmp/do.list'
+	while [ "${i}" -le "${i_max}" ]; do
+		_id="$(echo "${_list}" | shuf -n 1)"
+		if ! grep -q "${_id}" '/tmp/do.list'; then
+			echo "now remove process: \"${_id}\""
+			until curl -s -L -X DELETE -H 'Accept: application/vnd.github+json' -H "Authorization: Bearer ${GITHUB_TOKEN}" "https://api.github.com/repos/${GH_REPO}/actions/runs/${_id}" | jq -c; do
+				sleep 2
+			done
+			echo "${_id}" >>'/tmp/do.list'
+			_repeat='1'
+		else
+			_repeat="$((_repeat+1))"
+		fi
+		_list="$(echo "${_list}" | sed "/${_id}/d")"
+		unset _id
+		i="$((i+1))"
+	done
+	unset i i_max
+done
